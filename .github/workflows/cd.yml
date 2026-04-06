@@ -1,21 +1,39 @@
-name: CD Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  deploy:
+  build-and-test:
     runs-on: ubuntu-latest
-    # Ye line ensure karti hai ki CI pass hone par hi CD chale
-    needs: build-and-test 
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install & Build
+        run: |
+          cd backend && npm ci
+          cd ../frontend && npm ci && npm run build
+
+      - name: Docker Build Check
+        run: docker compose build
+
+  deploy-to-dockerhub:
+    runs-on: ubuntu-latest
+    needs: build-and-test # Ye ensure karta hai ki test pass hone par hi push ho
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -23,7 +41,6 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Build and Push Backend
       - name: Build and Push Backend
         uses: docker/build-push-action@v5
         with:
@@ -31,7 +48,6 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/megafullstack-backend:latest
 
-      # Build and Push Frontend
       - name: Build and Push Frontend
         uses: docker/build-push-action@v5
         with:
